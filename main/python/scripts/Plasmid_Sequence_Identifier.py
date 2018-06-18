@@ -1,18 +1,15 @@
-#!/usr/bin/env python2
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Jun 11 12:01:53 2018
 
-@author: Vasanth Chandrasekhar
-"""
+# coding: utf-8
+
+# In[274]:
+
 import os
 from itertools import chain
 import xlwt
 from Bio import SeqIO
 from snapgene_reader import snapgene_file_to_dict, snapgene_file_to_seqrecord
 
-
-class plasmidIDtool(): 
+class SequenceGrabber(): 
     """
     Tool to search sequence of DNA and find regions of interest
     Support only .seq files
@@ -21,7 +18,8 @@ class plasmidIDtool():
         
         self.wd = ''
         self.lis =[]
-        self.region = ''
+        self.regionup = ''
+        self.regiondown = ''
         self.searchRange = 0
         self.searchRegionLen = 0
         self.name =''
@@ -33,6 +31,7 @@ class plasmidIDtool():
         """
         verify working dir exsists
         """
+        print wd
         try:
             os.chdir(wd)
         except OSError:
@@ -59,46 +58,75 @@ class plasmidIDtool():
         return self.lis 
     
     
-    
-    
     def ProduceCleanSeq(self,filename): 
-        #MAKE SURE USELESS IS A CONSTANT 
+        
         """
         Format file, removing unessential characters. Useless constant is the character length of 
         the file for .seq,.fa,.gb,.dna files.
     
         """
-       
+        
         if filename.endswith('.fa'):
-            for seq_record in SeqIO.parse(filename, "fasta"): Data_formated = str(seq_record.seq).upper()
+            for seq_record in SeqIO.parse(filename, "fasta"): Data_formatted = str(seq_record.seq).upper()
         elif filename.endswith('.gb'):
-            for seq_record in SeqIO.parse(filename, "genbank"): Data_formated = str(seq_record.seq).upper()    
+            for seq_record in SeqIO.parse(filename, "genbank"): Data_formatted = str(seq_record.seq).upper()    
         elif filename.endswith('.dna'): 
-            Data_formated = str(snapgene_file_to_dict(filename)['seq']).upper()
+            Data_formatted = str(snapgene_file_to_dict(filename)['seq']).upper()
         elif filename.endswith('.seq'):
-                useless = 12 
-                data = open(filename).read().split()
-                Data_unformatted = list(chain.from_iterable(data[i] for i in range(len(data))))
-                Data_formated = Data_unformatted[useless:]
                 
-        Data_str = ''.join(Data_formated)
+                data = open(filename).read().split()
+                data.pop(0)
+                Data_formatted = list(chain.from_iterable(data[i] for i in range(len(data))))
+                
+                
+        Data_str = ''.join(Data_formatted)
         Clean_Seq = ''.join([i for i in Data_str if not i.isdigit()])
         
         return Clean_Seq
+    
 
 
     def find_region(self,Region,clean_seq):
         """
         return bool if region is in sequence
         """
-       
         return  Region in clean_seq
     
     
+    def grab_sequence(self,Regionup,Regiondown,clean_seq):
+
+        if (self.find_region(Regionup,clean_seq) == False and self.find_region(Regiondown,clean_seq) == False): 
+            print "Region does not exsist in given sequence "
+            print ' '
+            seq = "NaN"
+            return seq
+            
+        else: 
+            print "Regions Found"
+            print "  "
+            regiondown_start = clean_seq.find(Regiondown)
+            regionup_start = clean_seq.find(Regionup) 
+            regionupL = len(Regionup)
+            regiondownL = len(Regiondown)
+            
+            #confirm region order, reverse if incorrect 
+            if  regiondown_start <  regionup_start:
+                regiondown_start = clean_seq.find(Regionup)
+                regionup_start = clean_seq.find(Regiondown)
+                regionupL = len(Regiondown)
+                regiondownL = len(Regionup)
+                
+                print 'given down stream region is upstream of given upstream region'
+                print ' ' 
     
+            regionup_end = regionup_start + regionupL
+            
+            seq = clean_seq[regionup_end: regiondown_start]
+            
+            return seq
+            
     def find_region_range(self,Region,clean_seq,searchRange,searchRegionLen): 
-        #DEAL WITH THE WRAPAROUND ISSUE 
-        
+       
         """
         Look for given region in the cleaned sequence
         Foreward is 3' to 5'
@@ -137,11 +165,13 @@ class plasmidIDtool():
         Produce the reverse complement sequence of given sequence
         """
         if seq == "NaN": rev_comp = "NaN"
+        if 'N' in seq: rev_comp = "NaN"
         else:     
             complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
             rev_comp = ''.join([complement[base] for base in seq[::-1]])
         
         return rev_comp
+    
     
     def DNA_to_protein(self,seq): 
         """
@@ -171,12 +201,15 @@ class plasmidIDtool():
             }
 
             protein =""
-            if len(seq)%3 == 0:
-                for i in range(0, len(seq), 3):
-                    codon = seq[i:i + 3]
-                    protein+= table[codon]
-        return protein 
 
+            off_frame = len(seq)%3
+            for i in range(0, len(seq) - off_frame, 3):
+                codon = seq[i:i + 3]
+                protein+= table[codon]
+                
+                
+        return protein
+    
     
     def start(self): 
         
@@ -187,73 +220,65 @@ class plasmidIDtool():
             
             #Enter the path name by user 
             wd = str(raw_input('enter the folder path you would like to analyze: '))
-            
             if self.fetch_wd(wd) == True: 
                 print 'Checking files'
                 self.check_files()
                 print "You have" + " " + str(len(self.lis)) + " " + "file(s)"
-                for  i in self.lis:
-                    print i 
+                for file_ in self.lis:
+                    print file_
+                    
             else: 
                 print "  "
-                print "Cant Find you File, lets try again"
+                print "Cant find your file, lets try again"
             
             if len(self.lis) == 0: print "nothing in here, lets try again"    
+            
             else:
                 #Enter specifics for user
-                #self.region = str(raw_input('enter the refernce region you would like to search: '))
-                self.region = (str(raw_input('enter the refernce region(s) you would like to search, seperate regions with space: '))).split()
-                self.searchRange = int(raw_input('how many base pairs would you like to search : '))
-                self.searchRegionLen = int(raw_input('how many base pairs is region you like to find : '))
+
+                self.regionup,self.regiondown = (str(raw_input('enter the refernce region(s) you would like to search(upstream,downstream), seperate regions with space: '))).split()
                 self.name = raw_input('what you like to call your excel file : ')
                 
                 #Generate Excel files 
-                 #DONT NEED BACKWARD SEARCHER 
                 row = 0
                 book = xlwt.Workbook(encoding="utf-8")
                 sheet1 = book.add_sheet("Data")
                 sheet1.write(0, 0, "File Name")
-                sheet1.write(0, 1, "Reference Region")
-                sheet1.write(0, 2, "Search Distance")
-                sheet1.write(0, 3, "New Region Foreward")   
-                sheet1.write(0, 4, "New Region Backward")
-                sheet1.write(0, 5, "Protein Foreward")
-                sheet1.write(0, 6, "Protein Backward")
-                sheet1.write(0, 7, "New Region Foreward(Rev Comp)")
-                sheet1.write(0, 8, "New Region Backward(Rev Comp)")
-                sheet1.write(0, 9, "Protein Foreward(Rev Comp)")
-                sheet1.write(0, 10, "Protein Backward(Rev Comp)")
+                sheet1.write(0, 1, "Reference Region upstream")
+                sheet1.write(0, 2, "Reference Region downstream")
+                sheet1.write(0, 3, "Insert")
+                sheet1.write(0, 4, "Insert (reverse complement)")
+                sheet1.write(0, 5, "Translated Insert")
+                sheet1.write(0, 6, "Translated Insert (reverse complement)")
                 
-                for reg in self.region:
-                    for idx in range(len(self.lis)):
-                        print self.lis[idx]
-                        #Correct for row in excel
-                        row += 1 
-                       
-                        #Clean up sequence 
-                        clean_seq = self.ProduceCleanSeq(self.lis[idx])
+                
+#                 for reg in self.region:
+                for idx in range(len(self.lis)):
+                    print self.lis[idx]
+                    #Correct for row in excel
+                    row += 1 
+                    
+                    #Clean up sequence 
+                    clean_seq = self.ProduceCleanSeq(self.lis[idx])
 
-                        #Find regions and convert to proteins 
-                        new_regF, new_regB = self.find_region_range(reg,clean_seq,self.searchRange,self.searchRegionLen)
-                        proteinF = self.DNA_to_protein(new_regF)
-                        proteinB = self.DNA_to_protein(new_regB)
-                        new_regF_rc = self.rev_comp(new_regF)
-                        new_regB_rc = self.rev_comp(new_regB)
-                        proteinF_rc = self.DNA_to_protein(new_regF_rc)
-                        proteinB_rc = self.DNA_to_protein(new_regB_rc)
+                    seq = self.grab_sequence(self.regionup,self.regiondown,clean_seq)
+                    rev_comp_seq = self.rev_comp(seq)
+                    print rev_comp_seq
+                    protein = self.DNA_to_protein(seq)
+                    protein_rec_comp = self.DNA_to_protein(rev_comp_seq)
 
-                        #enter in the file 
-                        sheet1.write(row, 0, self.lis[idx])
-                        sheet1.write(row, 1, reg)
-                        sheet1.write(row, 2, self.searchRange)
-                        sheet1.write(row, 3, new_regF)
-                        sheet1.write(row, 4, new_regB)
-                        sheet1.write(row, 5, proteinF)
-                        sheet1.write(row, 6, proteinB)
-                        sheet1.write(row, 7, new_regF_rc)
-                        sheet1.write(row, 8, new_regB_rc)
-                        sheet1.write(row, 9, proteinF_rc)
-                        sheet1.write(row, 10,proteinB_rc)
+
+                    sheet1.write(row, 0, self.lis[idx])
+                    sheet1.write(row, 1, self.regionup)
+                    sheet1.write(row, 2, self.regiondown)
+                    sheet1.write(row, 3, seq)
+                    print seq
+                    sheet1.write(row, 4, rev_comp_seq)
+                    sheet1.write(row, 5, protein)
+                    sheet1.write(row, 6, protein_rec_comp)
+                    
+                
+                    
 
                 self.complete = True 
                 book.save(self.name)
@@ -266,9 +291,11 @@ class plasmidIDtool():
                 
                 
 def main():
-    plasmidIDer = plasmidIDtool()
+    plasmidIDer = SequenceGrabber()
     plasmidIDer.start()
 
 if __name__ == '__main__':
     main()
  
+            
+
