@@ -1,7 +1,4 @@
 
-# coding: utf-8
-
-# In[274]:
 
 import os
 from itertools import chain
@@ -11,8 +8,11 @@ from snapgene_reader import snapgene_file_to_dict, snapgene_file_to_seqrecord
 
 class SequenceGrabber(): 
     """
-    Tool to search sequence of DNA and find regions of interest
-    Support only .seq files
+    Tool to search sequence of DNA to find insert between given primer regions,
+    Translates insert to protein.
+    Converts insert to reverse complement.
+    Compiles all data into an excel file.
+    Supports only .seq, .gbk, .fa, .dna
     """
     def __init__(self):
         
@@ -29,9 +29,8 @@ class SequenceGrabber():
             
     def fetch_wd(self,wd): 
         """
-        verify working dir exsists
+        verify working dir exists
         """
-        print wd
         try:
             os.chdir(wd)
         except OSError:
@@ -45,9 +44,8 @@ class SequenceGrabber():
         
         
     def check_files(self):
-        
         """
-        generate list of .seq files 
+        generate list of supported files
         """
         self.lis = []
         direc = os.listdir(self.wd)
@@ -58,14 +56,11 @@ class SequenceGrabber():
         return self.lis 
     
     
-    def ProduceCleanSeq(self,filename): 
-        
+    def ProduceCleanSeq(self,filename):
         """
-        Format file, removing unessential characters. Useless constant is the character length of 
-        the file for .seq,.fa,.gb,.dna files.
+        Format file, removing unessential characters.
     
         """
-        
         if filename.endswith('.fa'):
             for seq_record in SeqIO.parse(filename, "fasta"): Data_formatted = str(seq_record.seq).upper()
         elif filename.endswith('.gb'):
@@ -77,13 +72,11 @@ class SequenceGrabber():
                 data = open(filename).read().split()
                 data.pop(0)
                 Data_formatted = list(chain.from_iterable(data[i] for i in range(len(data))))
-                
-                
+
         Data_str = ''.join(Data_formatted)
         Clean_Seq = ''.join([i for i in Data_str if not i.isdigit()])
         
         return Clean_Seq
-    
 
 
     def find_region(self,Region,clean_seq):
@@ -94,6 +87,11 @@ class SequenceGrabber():
     
     
     def grab_sequence(self,Regionup,Regiondown,clean_seq):
+        """
+        Find the insert between the given upstream and downstream primers
+        on the formatted sequence.
+
+        """
 
         if (self.find_region(Regionup,clean_seq) == False and self.find_region(Regiondown,clean_seq) == False): 
             print "Region does not exsist in given sequence "
@@ -125,14 +123,11 @@ class SequenceGrabber():
             
             return seq
             
-    def find_region_range(self,Region,clean_seq,searchRange,searchRegionLen): 
-       
+    def find_region_range(self,Region,clean_seq,searchRange,searchRegionLen):
         """
         Look for given region in the cleaned sequence
         Foreward is 3' to 5'
         """
-        
-        
         if self.find_region(Region,clean_seq) == False: 
             print "Region does not exsist in given sequence "
             print "  "
@@ -175,7 +170,7 @@ class SequenceGrabber():
     
     def DNA_to_protein(self,seq): 
         """
-        Convert DNA to Amino acid
+        Convert DNA to Amino acid, translation continues until out of frame
         """
         if seq == "NaN": protein = "NaN" 
         elif "N" in seq: protein = "Invalid sequence"
@@ -206,13 +201,11 @@ class SequenceGrabber():
             for i in range(0, len(seq) - off_frame, 3):
                 codon = seq[i:i + 3]
                 protein+= table[codon]
-                
-                
+
         return protein
     
     
-    def start(self): 
-        
+    def start(self):
         """
         Runs tool UI
         """
@@ -263,7 +256,7 @@ class SequenceGrabber():
 
                     seq = self.grab_sequence(self.regionup,self.regiondown,clean_seq)
                     rev_comp_seq = self.rev_comp(seq)
-                    print rev_comp_seq
+
                     protein = self.DNA_to_protein(seq)
                     protein_rec_comp = self.DNA_to_protein(rev_comp_seq)
 
@@ -272,7 +265,9 @@ class SequenceGrabber():
                     sheet1.write(row, 1, self.regionup)
                     sheet1.write(row, 2, self.regiondown)
                     sheet1.write(row, 3, seq)
+                    print 'Insert'
                     print seq
+                    print " "
                     sheet1.write(row, 4, rev_comp_seq)
                     sheet1.write(row, 5, protein)
                     sheet1.write(row, 6, protein_rec_comp)
